@@ -91,6 +91,8 @@ export class GroupVerify extends plugin {
   }
 
   async cmdReverifyNeverSpeak(e) {
+    if (!common.checkPermission(e, "admin", "admin")) return
+    if (!this.verifycfg.openGroup.includes(e.group_id)) return e.reply("当前群未开启验证哦~", true)
     let list = null
     try {
       list = await new Ga(e).getNeverSpeak(e.group_id)
@@ -143,10 +145,28 @@ Bot.on?.("notice.group.increase", async(e) => {
   if (e.user_id == (e.bot ?? Bot).uin) return
   if (Config.masterQQ.includes(e.user_id)) return
   if (Config.groupAdmin.whiteQQ.includes(e.user_id)) return
+  if (await isAdminInvitation(e)) return
 
   await sleep(DelayTime * 1000)
-  await verify(e.user_id, e.group_id, e)
+  try {
+    await verify(e.user_id, e.group_id, e)
+  } catch (error) {
+    logger.error(`${Log_Prefix}[进群验证]${e.group_id}/${e.user_id} 无法发送验证消息，未启动验证: ${error.message}`)
+  }
 })
+
+async function isAdminInvitation(e) {
+  const inviterId = e.inviter_id ?? (e.increase_type === "invite" ? e.operator_id : undefined)
+  if (!inviterId || String(inviterId) === String(e.user_id)) return false
+  try {
+    const member = e.group.pickMember(inviterId)
+    const info = member.info || (member.role ? member : await member.getInfo?.())
+    return info?.role === "owner" || info?.role === "admin"
+  } catch (error) {
+    logger.debug(`${Log_Prefix}[进群验证]无法确认邀请人身份，保留验证: ${error.message}`)
+    return false
+  }
+}
 
 // 答案监听
 Bot.on?.("message.group", async(e) => {
@@ -231,6 +251,10 @@ async function verify(userId, groupId, e) {
 
   const verifyCode = String(operator === "-" ? m - n : m + n)
   logger.mark(`${Log_Prefix}[进群验证]答案：${verifyCode}`)
+  const msg = ` 欢迎！\n请在「${time}」秒内发送\n「${m} ${operator} ${n}」的运算结果\n否则将会被移出群聊`
+  // Do not arm removal timers until the verification prompt was delivered.
+  if (!await sendMsg(e, [ segment.at(userId), msg ])) return false
+
   const kickTimer = setTimeout(async() => {
     sendMsg(e, [ segment.at(userId), "\n验证超时，移出群聊，请重新申请" ])
 
@@ -252,41 +276,29 @@ async function verify(userId, groupId, e) {
     clearTimeout(remindTimer)
   }, Math.abs(time * 1000 - 60000))
 
-  const msg = ` 欢迎！\n请在「${time}」秒内发送\n「${m} ${operator} ${n}」的运算结果\n否则将会被移出群聊`
-
-  // 消息发送成功才写入
-  if (await sendMsg(e, [ segment.at(userId), msg ])) {
-    temp[`${groupId}:${userId}`] = {
-      remainTimes: times,
-      nums: [ m, n ],
-      operator,
-      verifyCode,
-      kickTimer,
-      remindTimer
-    }
-  } else {
-    // 删除定时器
-    clearTimeout(remindTimer)
-    clearTimeout(kickTimer)
+  temp[`${groupId}:${userId}`] = {
+    remainTimes: times,
+    nums: [ m, n ],
+    operator,
+    verifyCode,
+    kickTimer,
+    remindTimer
   }
 }
 async function sendMsg(e, msg) {
-  const sendMsgFunctions = {
-    reply: async() => e.reply(msg),
-    group: async() => e.group.sendMsg(msg),
-    bot: async() => e.bot.pinkGroup(e.group_id).sendMsg(msg),
-    self_id: async() => Bot[e.self_id].pinkGroup(e.group_id).sendMsg(msg)
+  const sendMsgFunctions = []
+  if (typeof e.reply === "function") sendMsgFunctions.push(() => e.reply(msg))
+  if (typeof e.group?.sendMsg === "function") sendMsgFunctions.push(() => e.group.sendMsg(msg))
+  for (const bot of new Set([ e.bot, Bot[e.self_id] ])) {
+    if (typeof bot?.pickGroup === "function") sendMsgFunctions.push(() => bot.pickGroup(e.group_id).sendMsg(msg))
   }
 
-  for (const key in sendMsgFunctions) {
-    if (e[key]) {
-      try {
-        const sendFunction = sendMsgFunctions[key]
-        let res = await sendFunction()
-        return res
-      } catch (error) {
-        logger.debug(`${Log_Prefix}[进群验证]发送消息失败: ${error.message}`)
-      }
+  for (const send of sendMsgFunctions) {
+    try {
+      const result = await send()
+      if (result) return result
+    } catch (error) {
+      logger.debug(`${Log_Prefix}[进群验证]发送消息失败: ${error.message}`)
     }
   }
 
