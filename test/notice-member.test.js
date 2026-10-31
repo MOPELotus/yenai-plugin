@@ -3,6 +3,7 @@ import fs from "node:fs"
 import test from "node:test"
 import vm from "node:vm"
 import { resolveNoticeMember } from "../model/noticeMember.js"
+import { memberNoticeText } from "../model/memberNoticeText.js"
 
 test("uses available event/member metadata without querying the API", async () => {
   const result = await resolveNoticeMember({
@@ -52,7 +53,8 @@ function notifier() {
     Log_Prefix: "test",
     logger: { info() {} },
     segment: { image: () => "" },
-    resolveNoticeMember
+    resolveNoticeMember,
+    memberNoticeText
   })
   return { listener, messages }
 }
@@ -63,8 +65,8 @@ test("join notification displays a fetched nickname and targets the correct acco
     self_id: 100, group_id: 200, group_name: "Test group", user_id: 300, sub_type: "increase",
     bot: { uin: 100 }, member: { getInfo: async () => ({ nickname: "Past" }) }
   })
-  assert.match(messages[0].text, /新成员昵称：Past/)
-  assert.match(messages[0].text, /群名：Test group/)
+  assert.match(messages[0].text, /成员：Past（300）/)
+  assert.match(messages[0].text, /群聊：Test group/)
   assert.equal(messages[0].bot, 100)
 })
 
@@ -74,8 +76,8 @@ test("departure notification uses the preserved snapshot without an API lookup",
     self_id: 100, group_id: 200, user_id: 300, operator_id: 300, sub_type: "decrease",
     bot: { uin: 100 }, member: { nickname: "Leaving", card: "Old card" }
   })
-  assert.match(messages[0].text, /退群人昵称：Leaving/)
-  assert.match(messages[0].text, /退群人群名片：Old card/)
+  assert.match(messages[0].text, /成员：Leaving（300）/)
+  assert.match(messages[0].text, /名片：Old card/)
 })
 
 test("disabled notifications do not fetch profile data or send messages", async () => {
