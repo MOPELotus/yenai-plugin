@@ -1,6 +1,7 @@
 import { common } from "../../model/index.js"
 import { Config, Log_Prefix } from "#yenai.components"
 import formatDuration from "../../tools/formatDuration.js"
+import { resolveNoticeMember } from "../../model/noticeMember.js"
 
 function buildMessage(e, type, ext) {
   logger.info(`${Log_Prefix}[群通知] ${type}`)
@@ -11,21 +12,22 @@ function buildMessage(e, type, ext) {
   ]
 }
 
-function handleIncrease(e, bot, cfg) {
+async function handleIncrease(e, bot, cfg) {
   if (e.user_id === bot.uin) {
     if (!cfg.groupNumberChange) return false
     return buildMessage(e, "新增群聊", [ `新增群号：${e.group_id}` ])
   } else {
     if (!cfg.groupMemberNumberChange) return false
+    const member = await resolveNoticeMember(e, bot)
     return buildMessage(e, "新增群员", [
       `群号：${e.group_id}\n`,
       `新成员账号：${e.user_id}\n`,
-      `新成员昵称：${e.nickname ?? "未知"}`
+      `新成员昵称：${member.nickname || "未知"}`
     ])
   }
 }
 
-function handleDecrease(e, bot, cfg) {
+async function handleDecrease(e, bot, cfg) {
   if (e.dismiss) {
     if (!cfg.groupNumberChange) return false
     return buildMessage(e, "群聊被解散", [
@@ -46,21 +48,23 @@ function handleDecrease(e, bot, cfg) {
       if (!cfg.groupNumberChange) return false
       return buildMessage(e, "机器人退群", [ `退出群号：${e.group_id}` ])
     } else {
+      const member = await resolveNoticeMember(e, bot)
       return buildMessage(e, "群员退群", [
         `退群人账号：${e.user_id}\n`,
-        `退群人昵称：${e.member.nickname ?? "未知"}\n`,
-        `退群人群名片：${e.member.card ?? "未知"}\n`,
+        `退群人昵称：${member.nickname || "未知"}\n`,
+        `退群人群名片：${member.card ?? "未知"}\n`,
         `退出群号：${e.group_id}\n`,
         `退出群名称：${e.group_name}`
       ])
     }
   } else if (e.operator_id !== e.user_id) {
     if (!cfg.groupMemberNumberChange) return false
+    const member = await resolveNoticeMember(e, bot)
     return buildMessage(e, "群员被踢", [
       `操作人账号：${e.operator_id}\n`,
       `被踢人账号：${e.user_id}\n`,
-      `被踢人昵称：${e.member.nickname ?? "未知"}\n`,
-      `被踢人群名片：${e.member.card ?? "未知"}\n`,
+      `被踢人昵称：${member.nickname || "未知"}\n`,
+      `被踢人群名片：${member.card ?? "未知"}\n`,
       `被踢群号：${e.group_id}\n`,
       `被踢群名称：${e.group_name}`
     ])
@@ -112,10 +116,10 @@ Bot.on?.("notice.group", async(e) => {
 
   switch (e.sub_type) {
     case "increase":
-      msg = handleIncrease(e, bot, cfg)
+      msg = await handleIncrease(e, bot, cfg)
       break
     case "decrease":
-      msg = handleDecrease(e, bot, cfg)
+      msg = await handleDecrease(e, bot, cfg)
       break
     case "admin":
       msg = handleAdmin(e, bot, cfg)
