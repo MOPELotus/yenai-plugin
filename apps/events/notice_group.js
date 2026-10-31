@@ -2,7 +2,6 @@ import { common } from "../../model/index.js"
 import { Config, Log_Prefix } from "#yenai.components"
 import formatDuration from "../../tools/formatDuration.js"
 import { resolveNoticeMember } from "../../model/noticeMember.js"
-import { memberNoticeText } from "../../model/memberNoticeText.js"
 
 function buildMessage(e, type, ext) {
   logger.info(`${Log_Prefix}[群通知] ${type}`)
@@ -13,33 +12,64 @@ function buildMessage(e, type, ext) {
   ]
 }
 
-function buildMemberMessage(e, kind, member) {
-  logger.info(`${Log_Prefix}[群通知] ${kind}`)
-  return [ memberNoticeText(e, kind, member) ]
-}
-
 async function handleIncrease(e, bot, cfg) {
   if (e.user_id === bot.uin) {
     if (!cfg.groupNumberChange) return false
-    return buildMemberMessage(e, "botJoin")
+    return buildMessage(e, "新增群聊", [ `新增群号：${e.group_id}` ])
+  } else {
+    if (!cfg.groupMemberNumberChange) return false
+    const member = await resolveNoticeMember(e, bot)
+    return buildMessage(e, "新增群员", [
+      `群号：${e.group_id}\n`,
+      `群名：${e.group_name || e.group?.name || e.group?.group_name || "未知"}\n`,
+      `新成员账号：${e.user_id}\n`,
+      `新成员昵称：${member.nickname || "未知"}`
+    ])
   }
-  if (!cfg.groupMemberNumberChange) return false
-  return buildMemberMessage(e, "join", await resolveNoticeMember(e, bot))
 }
 
 async function handleDecrease(e, bot, cfg) {
   if (e.dismiss) {
     if (!cfg.groupNumberChange) return false
-    return buildMemberMessage(e, "dismiss")
-  }
-  if (e.user_id === bot.uin) {
+    return buildMessage(e, "群聊被解散", [
+      `操作人账号：${e.operator_id}\n`,
+      `解散群号：${e.group_id}\n`,
+      `解散群名称：${e.group_name}`
+    ])
+  } else if (e.user_id === bot.uin && e.operator_id !== bot.uin) {
     if (!cfg.groupNumberChange) return false
-    const kicked = e.operator_id && e.operator_id !== bot.uin
-    return buildMemberMessage(e, kicked ? "botKick" : "botLeave")
+    return buildMessage(e, "机器人被踢", [
+      `操作人账号：${e.operator_id}\n`,
+      `被踢群号：${e.group_id}\n`,
+      `被踢群名称：${e.group_name}`
+    ])
+  } else if (!e.operator_id || (e.operator_id === e.user_id)) {
+    if (!cfg.groupMemberNumberChange) return false
+    if (e.user_id === bot.uin) {
+      if (!cfg.groupNumberChange) return false
+      return buildMessage(e, "机器人退群", [ `退出群号：${e.group_id}` ])
+    } else {
+      const member = await resolveNoticeMember(e, bot)
+      return buildMessage(e, "群员退群", [
+        `退群人账号：${e.user_id}\n`,
+        `退群人昵称：${member.nickname || "未知"}\n`,
+        `退群人群名片：${member.card ?? "未知"}\n`,
+        `退出群号：${e.group_id}\n`,
+        `退出群名称：${e.group_name}`
+      ])
+    }
+  } else if (e.operator_id !== e.user_id) {
+    if (!cfg.groupMemberNumberChange) return false
+    const member = await resolveNoticeMember(e, bot)
+    return buildMessage(e, "群员被踢", [
+      `操作人账号：${e.operator_id}\n`,
+      `被踢人账号：${e.user_id}\n`,
+      `被踢人昵称：${member.nickname || "未知"}\n`,
+      `被踢人群名片：${member.card ?? "未知"}\n`,
+      `被踢群号：${e.group_id}\n`,
+      `被踢群名称：${e.group_name}`
+    ])
   }
-  if (!cfg.groupMemberNumberChange) return false
-  const kicked = e.operator_id && e.operator_id !== e.user_id
-  return buildMemberMessage(e, kicked ? "kick" : "leave", await resolveNoticeMember(e, bot))
 }
 
 function handleAdmin(e, bot, cfg) {
