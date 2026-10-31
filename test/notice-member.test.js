@@ -60,10 +60,11 @@ function notifier() {
 test("join notification displays a fetched nickname and targets the correct account", async () => {
   const { listener, messages } = notifier()
   await listener({
-    self_id: 100, group_id: 200, user_id: 300, sub_type: "increase",
+    self_id: 100, group_id: 200, group_name: "Test group", user_id: 300, sub_type: "increase",
     bot: { uin: 100 }, member: { getInfo: async () => ({ nickname: "Past" }) }
   })
   assert.match(messages[0].text, /新成员昵称：Past/)
+  assert.match(messages[0].text, /群名：Test group/)
   assert.equal(messages[0].bot, 100)
 })
 

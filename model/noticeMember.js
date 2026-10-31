@@ -1,4 +1,8 @@
-/** Resolve the affected user's profile without depending on optional notice fields. */
+/**
+ * Resolve the affected user's profile without depending on optional notice fields.
+ * @param {object} e Notice event.
+ * @param {object} bot Account receiving the event.
+ */
 export async function resolveNoticeMember(e, bot) {
   const profile = {
     nickname: e.nickname || e.member?.nickname || e.sender?.nickname,

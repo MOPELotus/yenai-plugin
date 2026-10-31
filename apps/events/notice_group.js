@@ -21,6 +21,7 @@ async function handleIncrease(e, bot, cfg) {
     const member = await resolveNoticeMember(e, bot)
     return buildMessage(e, "新增群员", [
       `群号：${e.group_id}\n`,
+      `群名：${e.group_name || e.group?.name || e.group?.group_name || "未知"}\n`,
       `新成员账号：${e.user_id}\n`,
       `新成员昵称：${member.nickname || "未知"}`
     ])
